@@ -53,19 +53,58 @@ endfunction(add_def)
 
 ##### CONFIGURATION #####
 
-set(PROJ_NAME render_raytracing)
+set(PROJ_NAME render_raytracing_lib)
 
 project(${PROJ_NAME} CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 
+link_external_library(util_image)
 link_external_library(sharedutils)
 link_external_library(mathutil)
 link_external_library(vfilesystem)
+link_external_library(util_raytracing)
+link_external_library(util_ocio)
+link_external_library(util_udm)
 
+add_include_dir(cycles)
+add_include_dir(cycles_atomic)
+add_include_dir(openimageio)
+add_include_dir(openexr)
 add_include_dir(glm)
 
+add_external_library(OpenEXR_Half)
+add_external_library(OpenEXR_Iex)
+add_external_library(OpenEXR_IlmThread)
+add_external_library(OpenEXR_Imath)
+add_external_library(OpenEXR_IlmImf)
+add_external_library(OpenColorIO)
+add_external_library(OpenImageIO)
+add_external_library(boost_thread)
+add_external_library(boost_filesystem)
+add_external_library(tiff)
+add_external_library(lpng)
+add_external_library(zlib)
+add_external_library(jpeg)
+add_external_library(lz4)
+
+set(DEPENDENCY_CYCLES_LIBRARY_LOCATION "" CACHE FILEPATH "Path to cycles libraries.")
+set(DEPENDENCY_OPENEXR_LIBRARY_LOCATION "" CACHE FILEPATH "Path to openexr libraries.")
+add_def(OIIO_STATIC_BUILD)
+add_def(GLEW_STATIC)
+add_def(RTUTIL_DLL)
+add_def(CCL_NAMESPACE_BEGIN=namespace\ ccl\ {)
+add_def(CCL_NAMESPACE_END=})
+
 ##### CONFIGURATION #####
+
+set(LIB_TYPE SHARED)
+if(ENABLE_STATIC_LIBRARY_FLAG)
+	option(CONFIG_STATIC_LIBRARY "Build as static library?" OFF)
+endif()
+if(DEFINED ${CONFIG_STATIC_LIBRARY} AND ${CONFIG_STATIC_LIBRARY})
+	set(LIB_TYPE STATIC)
+endif()
 
 foreach(def IN LISTS DEFINITIONS)
 	add_definitions(-D${def})
@@ -87,7 +126,7 @@ file(GLOB_RECURSE SRC_FILES
     "${CMAKE_CURRENT_LIST_DIR}/include/*.h"
     "${CMAKE_CURRENT_LIST_DIR}/include/*.hpp"
 )
-add_executable(${PROJ_NAME} ${SRC_FILES})
+add_library(${PROJ_NAME} ${LIB_TYPE} ${SRC_FILES})
 if(WIN32)
 	target_compile_options(${PROJ_NAME} PRIVATE /wd4251)
 	target_compile_options(${PROJ_NAME} PRIVATE /wd4996)
@@ -112,4 +151,4 @@ if(DEFINED PRECOMPILED_HEADER)
 endif()
 set_target_properties(${PROJ_NAME} PROPERTIES ${TARGET_PROPERTIES})
 
-add_dependencies(${PROJ_NAME} render_raytracing_lib)
+add_dependencies(${PROJ_NAME} util_raytracing)
