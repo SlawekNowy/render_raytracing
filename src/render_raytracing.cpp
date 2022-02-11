@@ -139,11 +139,11 @@ RTJobManager::RTJobManager(std::unordered_map<std::string,std::string> &&launchP
 	if(itDeviceType != m_launchParams.end())
 	{
 		auto &strDeviceType = itDeviceType->second;
-		if(ustring::compare(strDeviceType,"cpu",false))
+		if(ustring::compare<std::string>(strDeviceType,"cpu",false))
 			m_devices.push_back(unirender::Scene::DeviceType::CPU);
-		else if(ustring::compare(strDeviceType,"gpu",false))
+		else if(ustring::compare<std::string>(strDeviceType,"gpu",false))
 			m_devices.push_back(unirender::Scene::DeviceType::GPU);
-		else if(ustring::compare(strDeviceType,"combined",false))
+		else if(ustring::compare<std::string>(strDeviceType,"combined",false))
 		{
 			m_devices.push_back(unirender::Scene::DeviceType::GPU);
 			m_devices.push_back(unirender::Scene::DeviceType::CPU);
@@ -313,7 +313,7 @@ void RTJobManager::CollectJobs()
 	{
 		std::string ext;
 		ufile::get_extension(m_inputFileName,&ext);
-		if(ustring::compare(ext,"txt",false))
+		if(ustring::compare<std::string>(ext,"txt",false))
 		{
 			auto f = FileManager::OpenSystemFile(m_inputFileName.c_str(),"r");
 			if(f == nullptr)
@@ -468,7 +468,9 @@ void RTJobManager::UpdateJob(DeviceInfo &devInfo)
 			texInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
 			texInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC6;
 			texInfo.flags = uimg::TextureInfo::Flags::GenerateMipmaps;
-			if(uimg::save_texture(path.GetString(),*imgBuf,texInfo,false,nullptr,true) == false)
+			uimg::TextureSaveInfo saveInfo {};
+			saveInfo.texInfo = texInfo;
+			if(uimg::save_texture(path.GetString(),*imgBuf,saveInfo,nullptr,true) == false)
 				errMsg = "Unable to save image as '" +devInfo.outputPath.GetString() +"'!";
 		}
 		else
@@ -495,7 +497,7 @@ void RTJobManager::UpdateJob(DeviceInfo &devInfo)
 				if(errMsg.has_value() == false)
 				{
 					auto result = false;
-					imgBuf->Convert(uimg::ImageBuffer::Format::RGB_LDR);
+					imgBuf->Convert(uimg::Format::RGB_LDR);
 
 					//if(imgBuf->IsHDRFormat() || imgBuf->IsFloatFormat())
 					//	result = uimg::save_image(fImg,*imgBuf,uimg::ImageFormat::HDR);
@@ -712,13 +714,13 @@ bool RTJobManager::StartJob(const std::string &jobName,DeviceInfo &devInfo)
 		if(itRenderMode != m_launchParams.end())
 		{
 			auto &strRenderMode = itRenderMode->second;
-			if(ustring::compare(strRenderMode,"albedo",false))
+			if(ustring::compare<std::string>(strRenderMode,"albedo",false))
 				renderMode = unirender::Scene::RenderMode::SceneAlbedo;
-			else if(ustring::compare(strRenderMode,"depth",false))
+			else if(ustring::compare<std::string>(strRenderMode,"depth",false))
 				renderMode = unirender::Scene::RenderMode::SceneDepth;
-			else if(ustring::compare(strRenderMode,"normals",false))
+			else if(ustring::compare<std::string>(strRenderMode,"normals",false))
 				renderMode = unirender::Scene::RenderMode::SceneNormals;
-			else if(ustring::compare(strRenderMode,"image",false))
+			else if(ustring::compare<std::string>(strRenderMode,"image",false))
 				renderMode = unirender::Scene::RenderMode::RenderImage;
 		}
 
@@ -800,11 +802,11 @@ bool RTJobManager::StartJob(const std::string &jobName,DeviceInfo &devInfo)
 	{
 		auto &strCamType = itCamType->second;
 		std::optional<unirender::Camera::CameraType> camType {};
-		if(ustring::compare(strCamType,"orthographic",false))
+		if(ustring::compare<std::string>(strCamType,"orthographic",false))
 			camType = unirender::Camera::CameraType::Orthographic;
-		else if(ustring::compare(strCamType,"perspective",false))
+		else if(ustring::compare<std::string>(strCamType,"perspective",false))
 			camType = unirender::Camera::CameraType::Perspective;
-		else if(ustring::compare(strCamType,"panorama",false))
+		else if(ustring::compare<std::string>(strCamType,"panorama",false))
 			camType = unirender::Camera::CameraType::Panorama;
 		if(camType.has_value())
 			rtScene->GetCamera().SetCameraType(*camType);
@@ -815,13 +817,13 @@ bool RTJobManager::StartJob(const std::string &jobName,DeviceInfo &devInfo)
 	{
 		auto &strPanoramaType = itPanoramaType->second;
 		std::optional<unirender::Camera::PanoramaType> panoramaType {};
-		if(ustring::compare(strPanoramaType,"equirectangular",false))
+		if(ustring::compare<std::string>(strPanoramaType,"equirectangular",false))
 			panoramaType = unirender::Camera::PanoramaType::Equirectangular;
-		else if(ustring::compare(strPanoramaType,"fisheye_equidistant",false))
+		else if(ustring::compare<std::string>(strPanoramaType,"fisheye_equidistant",false))
 			panoramaType = unirender::Camera::PanoramaType::FisheyeEquidistant;
-		else if(ustring::compare(strPanoramaType,"fisheye_equisolid",false))
+		else if(ustring::compare<std::string>(strPanoramaType,"fisheye_equisolid",false))
 			panoramaType = unirender::Camera::PanoramaType::FisheyeEquisolid;
-		else if(ustring::compare(strPanoramaType,"mirrorball",false))
+		else if(ustring::compare<std::string>(strPanoramaType,"mirrorball",false))
 			panoramaType = unirender::Camera::PanoramaType::Mirrorball;
 		if(panoramaType.has_value())
 			rtScene->GetCamera().SetPanoramaType(*panoramaType);
