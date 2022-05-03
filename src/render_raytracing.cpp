@@ -18,6 +18,7 @@
 #include <sharedutils/util_parallel_job.hpp>
 #include <sharedutils/util_path.hpp>
 #include <fsys/filesystem.h>
+#include <fsys/ifile.hpp>
 #include <util_ocio.hpp>
 #include <sstream>
 #include <queue>
@@ -502,7 +503,8 @@ void RTJobManager::UpdateJob(DeviceInfo &devInfo)
 					//if(imgBuf->IsHDRFormat() || imgBuf->IsFloatFormat())
 					//	result = uimg::save_image(fImg,*imgBuf,uimg::ImageFormat::HDR);
 					//else
-						result = uimg::save_image(fImg,*imgBuf,uimg::ImageFormat::PNG);
+					fsys::File fp {fImg};
+					result = uimg::save_image(fp,*imgBuf,uimg::ImageFormat::PNG);
 					if(result == false)
 						errMsg = "Unable to save image as '" +devInfo.outputPath.GetString() +"'!";
 				}
@@ -560,10 +562,10 @@ void RTJobManager::PrintHeader(const unirender::Scene::CreateInfo &createInfo,co
 	case unirender::Scene::DenoiseMode::None:
 		std::cout<<"None";
 		break;
-	case unirender::Scene::DenoiseMode::Fast:
+	case unirender::Scene::DenoiseMode::AutoFast:
 		std::cout<<"Fast";
 		break;
-	case unirender::Scene::DenoiseMode::Detailed:
+	case unirender::Scene::DenoiseMode::AutoDetailed:
 		std::cout<<"Detailed";
 		break;
 	}
@@ -741,7 +743,7 @@ bool RTJobManager::StartJob(const std::string &jobName,DeviceInfo &devInfo)
 
 		auto itDenoise = m_launchParams.find("-denoise");
 		if(itDenoise != m_launchParams.end())
-			createInfo.denoiseMode = util::to_boolean(itDenoise->second) ? unirender::Scene::DenoiseMode::Detailed : unirender::Scene::DenoiseMode::Fast;
+			createInfo.denoiseMode = util::to_boolean(itDenoise->second) ? unirender::Scene::DenoiseMode::AutoDetailed : unirender::Scene::DenoiseMode::AutoFast;
 
 		createInfo.deviceType = devInfo.deviceType;
 
