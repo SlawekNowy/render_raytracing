@@ -39,7 +39,7 @@ public:
 			: deviceType{deviceType}
 		{}
 		unirender::Scene::DeviceType deviceType {};
-		std::optional<util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>>> job {};
+		std::optional<util::ParallelJob<uimg::ImageLayerSet>> job {};
 		std::shared_ptr<unirender::Renderer> renderer = nullptr;
 		std::shared_ptr<unirender::Scene> rtScene = nullptr;
 		std::chrono::high_resolution_clock::time_point startTime {};
@@ -456,7 +456,7 @@ void RTJobManager::UpdateJob(DeviceInfo &devInfo)
 	else
 	{
 		std::cout<<"Job has been completed successfully!"<<std::endl;
-		auto imgBuf = job.GetResult();
+		auto imgBuf = job.GetResult().images.begin()->second;
 		
 		std::optional<std::string> errMsg {};
 		if(m_renderMode == unirender::Scene::RenderMode::BakeDiffuseLighting)
