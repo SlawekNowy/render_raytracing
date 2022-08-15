@@ -784,6 +784,30 @@ bool RTJobManager::StartJob(const std::string &jobName,DeviceInfo &devInfo)
 		if(itDenoise != m_launchParams.end())
 			createInfo.denoiseMode = util::to_boolean(itDenoise->second) ? unirender::Scene::DenoiseMode::AutoDetailed : unirender::Scene::DenoiseMode::AutoFast;
 
+		auto itAdaptiveSampling = m_launchParams.find("-adaptiveSampling");
+		if(itAdaptiveSampling != m_launchParams.end())
+		{
+			auto &enabled = sceneInfo.useAdaptiveSampling;
+			float &adaptiveSamplingThreshold = sceneInfo.adaptiveSamplingThreshold;
+			uint32_t &adaptiveMinSamples = sceneInfo.adaptiveMinSamples;
+			enabled = true;
+			adaptiveSamplingThreshold = 0.01f;
+			adaptiveMinSamples = 0;
+
+			std::vector<std::string> args;
+			ustring::explode_whitespace(itAdaptiveSampling->second,args);
+			if(args.size() > 0)
+			{
+				enabled = util::to_boolean(args[0]);
+				if(args.size() > 1)
+				{
+					adaptiveSamplingThreshold = util::to_float(args[1]);
+					if(args.size() > 2)
+						adaptiveMinSamples = util::to_uint(args[2]);
+				}
+			}
+		}
+
 		createInfo.deviceType = devInfo.deviceType;
 
 		auto itTonemapped = m_launchParams.find("-tonemapped");
