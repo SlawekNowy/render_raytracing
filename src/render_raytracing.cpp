@@ -54,6 +54,7 @@ public:
 
 	void SetExposure(float exposure);
 	void SetGamma(float gamma);
+	void SetSaveAsHdr(bool saveAsHdr) {m_saveAsHdr = saveAsHdr;}
 
 	bool StartNextJob();
 	bool IsComplete() const;
@@ -78,6 +79,7 @@ private:
 	unirender::Scene::RenderMode m_renderMode;
 	float m_exposure = 0.f;
 	float m_gamma = 2.2f;
+	bool m_saveAsHdr = false;
 	std::string m_inputFileName;
 	uint32_t m_numSucceeded = 0;
 	uint32_t m_numFailed = 0;
@@ -117,6 +119,10 @@ RTJobManager::RTJobManager(std::unordered_map<std::string,std::string> &&launchP
 	auto itGamma = m_launchParams.find("-gamma");
 	if(itGamma != m_launchParams.end())
 		SetGamma(util::to_float(itGamma->second));
+
+	auto itHdr = m_launchParams.find("-hdr");
+	if(itHdr != m_launchParams.end())
+		SetSaveAsHdr(true);
 
 	auto itLog = m_launchParams.find("-log");
 	if(itLog != m_launchParams.end())
@@ -456,23 +462,56 @@ void RTJobManager::UpdateJob(DeviceInfo &devInfo)
 	else
 	{
 		std::cout<<"Job has been completed successfully!"<<std::endl;
-		auto imgBuf = job.GetResult().images.begin()->second;
+		auto images = job.GetResult().images;
+		auto imgBuf = images.begin()->second;
 		
 		std::optional<std::string> errMsg {};
-		if(m_renderMode == unirender::Scene::RenderMode::BakeDiffuseLighting)
+		if(m_renderMode == unirender::Scene::RenderMode::BakeDiffuseLighting || m_renderMode == unirender::Scene::RenderMode::BakeDiffuseLightingSeparate)
 		{
-			auto path = devInfo.outputPath;
-			path.RemoveFileExtension();
-			path += ".dds";
-			uimg::TextureInfo texInfo {};
-			texInfo.containerFormat = uimg::TextureInfo::ContainerFormat::DDS;
-			texInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
-			texInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC6;
-			texInfo.flags = uimg::TextureInfo::Flags::GenerateMipmaps;
-			uimg::TextureSaveInfo saveInfo {};
-			saveInfo.texInfo = texInfo;
-			if(uimg::save_texture(path.GetString(),*imgBuf,saveInfo,nullptr,true) == false)
-				errMsg = "Unable to save image as '" +devInfo.outputPath.GetString() +"'!";
+			struct OutputImageInfo
+			{
+				std::string suffix = "";
+				std::shared_ptr<uimg::ImageBuffer> imgBuf;
+			};
+			std::vector<OutputImageInfo> outputImageInfos;
+			if(m_renderMode == unirender::Scene::RenderMode::BakeDiffuseLighting)
+				outputImageInfos.push_back({"",imgBuf});
+			else
+			{
+				outputImageInfos.push_back({"_direct",images["DIFFUSE_DIRECT"]});
+				outputImageInfos.push_back({"_indirect",images["DIFFUSE_INDIRECT"]});
+			}
+			for(auto &outputImgInfo : outputImageInfos)
+			{
+				auto path = devInfo.outputPath;
+				path.RemoveFileExtension(std::vector<std::string>{"hdr","dds"});
+				path += outputImgInfo.suffix;
+
+				if(m_saveAsHdr)
+				{
+					path += ".hdr";
+					auto f = filemanager::open_system_file(path.GetString(),filemanager::FileMode::Write | filemanager::FileMode::Binary);
+					if(!f)
+					{
+						errMsg = "Failed to open output file '" +path.GetString() +"'!";
+						continue;
+					}
+					fsys::File fp {f};
+					if(!uimg::save_image(fp,*outputImgInfo.imgBuf,uimg::ImageFormat::HDR))
+						errMsg = "Unable to save image as '" +devInfo.outputPath.GetString() +"'!";
+					continue;
+				}
+				path += ".dds";
+				uimg::TextureInfo texInfo {};
+				texInfo.containerFormat = uimg::TextureInfo::ContainerFormat::DDS;
+				texInfo.inputFormat = uimg::TextureInfo::InputFormat::R16G16B16A16_Float;
+				texInfo.outputFormat = uimg::TextureInfo::OutputFormat::BC6;
+				texInfo.flags = uimg::TextureInfo::Flags::GenerateMipmaps;
+				uimg::TextureSaveInfo saveInfo {};
+				saveInfo.texInfo = texInfo;
+				if(uimg::save_texture(path.GetString(),*outputImgInfo.imgBuf,saveInfo,nullptr,true) == false)
+					errMsg = "Unable to save image as '" +devInfo.outputPath.GetString() +"'!";
+			}
 		}
 		else
 		{
@@ -768,10 +807,6 @@ bool RTJobManager::StartJob(const std::string &jobName,DeviceInfo &devInfo)
 	// We'll disable these since we don't have a preview anyway
 	createInfo.progressive = false;
 	createInfo.progressiveRefine = false;
-
-	// TODO: We *should* disable progressive rendering, however there is currently a slight difference in rendering behavior when
-	// not rendering with the progressive flag, so we'll keep it enabled for now.
-	createInfo.progressive = true;
 
 	PrintHeader(createInfo,sceneInfo);
 	std::cout<<std::endl;
