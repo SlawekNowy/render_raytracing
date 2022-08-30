@@ -58,6 +58,8 @@ public:
 
 	bool StartNextJob();
 	bool IsComplete() const;
+	bool ShouldShutDownOnCompletion() const {return m_shutdownOnCompletion;}
+	bool ShouldAutoCloseOnCompletion() const {return !m_dontCloseOnCompletion;}
 	uint32_t GetNumSucceeded() const {return m_numSucceeded;}
 	uint32_t GetNumFailed() const {return m_numFailed;}
 	uint32_t GetNumSkipped() const {return m_numSkipped;}
@@ -77,6 +79,8 @@ private:
 	uint32_t m_numJobs = 0;
 
 	unirender::Scene::RenderMode m_renderMode;
+	bool m_shutdownOnCompletion = false;
+	bool m_dontCloseOnCompletion = false;
 	float m_exposure = 0.f;
 	float m_gamma = 2.2f;
 	bool m_saveAsHdr = false;
@@ -279,6 +283,20 @@ RTJobManager::RTJobManager(std::unordered_map<std::string,std::string> &&launchP
 		std::cout<<"Exported "<<numExported<<" render processess!"<<std::endl;
 		if(numFailed > 0)
 			std::cout<<"Failed to export "<<numFailed<<" render processes!"<<std::endl;
+	});
+	util::CommandManager::RegisterCommand("shutdown",[this](std::vector<std::string> args) {
+		m_shutdownOnCompletion = args.empty() ? !m_shutdownOnCompletion : util::to_boolean(args[0]);
+		if(m_shutdownOnCompletion)
+			std::cout<<"Auto-Shutdown enabled! Operating system will shut down when rendering has been completed."<<std::endl;
+		else
+			std::cout<<"Auto-Shutdown disabled"<<std::endl;
+	});
+	util::CommandManager::RegisterCommand("autoclose",[this](std::vector<std::string> args) {
+		m_dontCloseOnCompletion = args.empty() ? !m_dontCloseOnCompletion : !util::to_boolean(args[0]);
+		if(m_dontCloseOnCompletion)
+			std::cout<<"Auto-Close disabled!"<<std::endl;
+		else
+			std::cout<<"Auto-Close enabled!"<<std::endl;
 	});
 
 	CollectJobs();
@@ -930,7 +948,7 @@ bool RTJobManager::StartJob(const std::string &jobName,DeviceInfo &devInfo)
 	devInfo.startTime = std::chrono::high_resolution_clock::now();
 
 	rtScene->Finalize();
-	devInfo.renderer = unirender::Renderer::Create(*rtScene,createInfo.renderer);
+	devInfo.renderer = unirender::Renderer::Create(*rtScene,createInfo.renderer,unirender::Renderer::Flags::DisableDisplayDriver);
 	if(devInfo.renderer == nullptr)
 		return false;
 	devInfo.job = devInfo.renderer->StartRender();
@@ -968,8 +986,22 @@ __declspec(dllexport) int render_raytracing(int argc,char *argv[])
 
 	util::flash_window();
 	std::cout<<rtManager->GetNumSucceeded()<<" succeeded, "<<rtManager->GetNumSkipped()<<" skipped and "<<rtManager->GetNumFailed()<<" failed!"<<std::endl;
+	
+	if(rtManager->ShouldAutoCloseOnCompletion())
+	{
+		char c;
+		std::cin>>c;
+	}
+	
+	auto shutDown = rtManager->ShouldShutDownOnCompletion();
 	rtManager = nullptr;
 	std::this_thread::sleep_for(std::chrono::seconds{5});
+	if(shutDown)
+	{
+		std::cout<<"Shutting down..."<<std::endl;
+		std::this_thread::sleep_for(std::chrono::seconds{5});
+		util::shutdown_os();
+	}
 	return EXIT_SUCCESS;
 }
 };
