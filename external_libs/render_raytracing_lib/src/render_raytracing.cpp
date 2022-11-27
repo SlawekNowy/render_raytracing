@@ -980,9 +980,15 @@ bool RTJobManager::StartNextJob()
 	return success;
 }
 
+#ifdef __linux__
+#define DLLEXPORT __attribute__((visibility("default")))
+#else
+#define DLLEXPORT __declspec(dllexport)
+#endif
+
 extern "C"
 {
-__declspec(dllexport) int render_raytracing(int argc,char *argv[])
+DLLEXPORT int render_raytracing(int argc,char *argv[])
 {
 	auto rtManager = RTJobManager::Launch(argc,argv);
 	if(rtManager == nullptr)
