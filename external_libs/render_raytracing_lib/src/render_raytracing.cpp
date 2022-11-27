@@ -948,7 +948,13 @@ bool RTJobManager::StartJob(const std::string &jobName,DeviceInfo &devInfo)
 	devInfo.startTime = std::chrono::high_resolution_clock::now();
 
 	rtScene->Finalize();
-	devInfo.renderer = unirender::Renderer::Create(*rtScene,createInfo.renderer,unirender::Renderer::Flags::DisableDisplayDriver);
+	std::string errMsg;
+	devInfo.renderer = unirender::Renderer::Create(*rtScene,createInfo.renderer,errMsg,unirender::Renderer::Flags::DisableDisplayDriver);
+	if(devInfo.renderer == nullptr)
+	{
+		std::cout<<"Failed to create renderer: "<<errMsg<<"!"<<std::endl;
+		return false;
+	}
 	if(devInfo.renderer == nullptr)
 		return false;
 	devInfo.job = devInfo.renderer->StartRender();

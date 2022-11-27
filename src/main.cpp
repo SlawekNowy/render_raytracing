@@ -12,7 +12,7 @@ int main(int argc,char *argv[])
 	util::set_current_working_directory(programPath.GetString());
 
 	auto path = util::Path::CreatePath(FileManager::GetRootPath());
-	path += "modules/cycles";
+	path += "modules/unirender";
 
 	auto libPath = util::Path::CreatePath(FileManager::GetProgramPath());
 	libPath += "bin/render_raytracing_lib.dll";
