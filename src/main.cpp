@@ -15,7 +15,11 @@ int main(int argc,char *argv[])
 	path += "modules/unirender";
 
 	auto libPath = util::Path::CreatePath(FileManager::GetProgramPath());
-	libPath += "bin/render_raytracing_lib.dll";
+#ifdef _WIN32
+	libPath += "bin/render_raytracing_lib";
+#else
+	libPath += "lib/librender_raytracing_lib";
+#endif
 
 	auto fileRootPath = util::Path::CreatePath(FileManager::GetRootPath());
 	FileManager::SetAbsoluteRootPath(fileRootPath.GetString());
