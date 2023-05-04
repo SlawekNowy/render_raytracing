@@ -17,6 +17,10 @@
 #include <sharedutils/datastream.h>
 #include <sharedutils/util_parallel_job.hpp>
 #include <sharedutils/util_path.hpp>
+#include <spdlog/spdlog.h>
+#include <spdlog/logger.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/basic_file_sink.h>
 #include <fsys/filesystem.h>
 #include <fsys/ifile.hpp>
 #include <util_ocio.hpp>
@@ -25,6 +29,7 @@
 #include <cstdlib>
 
 #pragma optimize("", off)
+static std::shared_ptr<spdlog::logger> g_logger = nullptr;
 class RTJobManager {
   public:
 	enum class ToneMapping : uint8_t {
@@ -64,6 +69,7 @@ class RTJobManager {
 	void UpdateJob(DeviceInfo &devInfo);
 	void PrintHeader(const unirender::Scene::CreateInfo &createInfo, const unirender::Scene::SceneInfo &sceneInfo);
 	void PrintHelp();
+	void PrintCommandHelp();
 	bool StartJob(const std::string &job, DeviceInfo &devInfo);
 	void CollectJobs();
 
@@ -99,6 +105,19 @@ std::shared_ptr<RTJobManager> RTJobManager::Launch(int argc, char *argv[])
 
 RTJobManager::RTJobManager(std::unordered_map<std::string, std::string> &&launchParams, const std::string &inputFileName) : m_launchParams {std::move(launchParams)}, m_inputFileName {inputFileName}
 {
+	auto conSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+	conSink->set_level(spdlog::level::info);
+
+	auto logFilePath = ufile::get_path_from_filename(inputFileName) + "log.txt";
+	auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFilePath, true);
+	fileSink->set_level(spdlog::level::trace);
+
+	auto logger = std::make_shared<spdlog::logger>("renderer", spdlog::sinks_init_list {conSink, fileSink});
+	logger->set_level(spdlog::level::info);
+	spdlog::register_logger(logger);
+	unirender::set_logger(logger);
+	g_logger = logger;
+
 	/*auto kernelPath = util::Path::CreatePath(util::get_program_path());
 	kernelPath += "modules/cycles";
 	auto itKernelPath = m_launchParams.find("-kernel_path");
@@ -124,7 +143,7 @@ RTJobManager::RTJobManager(std::unordered_map<std::string, std::string> &&launch
 
 	auto itLog = m_launchParams.find("-log");
 	if(itLog != m_launchParams.end()) {
-		unirender::set_log_handler([](std::string msg) { std::cout << "Unirender: " << msg << std::endl; });
+		unirender::set_log_handler([](std::string msg) { g_logger->info(msg); });
 	}
 
 #if 0
@@ -151,18 +170,6 @@ RTJobManager::RTJobManager(std::unordered_map<std::string, std::string> &&launch
 	}
 	if(m_devices.empty())
 		m_devices.push_back(unirender::Scene::DeviceType::GPU);
-	for(auto &devInfo : m_devices) {
-		std::cout << "Using device: ";
-		switch(devInfo.deviceType) {
-		case unirender::Scene::DeviceType::GPU:
-			std::cout << "GPU";
-			break;
-		case unirender::Scene::DeviceType::CPU:
-			std::cout << "CPU";
-			break;
-		}
-		std::cout << std::endl;
-	}
 
 	util::minimize_window_to_tray();
 	util::CommandManager::StartAsync();
@@ -183,9 +190,9 @@ RTJobManager::RTJobManager(std::unordered_map<std::string, std::string> &&launch
 			else
 				++numFailed;
 		}
-		std::cout << "Paused " << numPaused << " render processess!" << std::endl;
+		g_logger->info("Paused {} render processess!", numPaused);
 		if(numFailed > 0)
-			std::cout << "Failed to pause " << numFailed << " render processes!" << std::endl;
+			g_logger->error("Failed to pause {} render processes!", numFailed);
 	});
 	util::CommandManager::RegisterCommand("resume", [this](std::vector<std::string> args) {
 		uint32_t numResumed = 0;
@@ -198,9 +205,9 @@ RTJobManager::RTJobManager(std::unordered_map<std::string, std::string> &&launch
 			else
 				++numFailed;
 		}
-		std::cout << "Resumed " << numResumed << " render processess!" << std::endl;
+		g_logger->info("Resumed {} render processess!", numResumed);
 		if(numFailed > 0)
-			std::cout << "Failed to resume " << numFailed << " render processes!" << std::endl;
+			g_logger->error("Failed to resume {} render processes!", numFailed);
 	});
 	util::CommandManager::RegisterCommand("stop", [this](std::vector<std::string> args) {
 		uint32_t numStopped = 0;
@@ -213,9 +220,9 @@ RTJobManager::RTJobManager(std::unordered_map<std::string, std::string> &&launch
 			else
 				++numFailed;
 		}
-		std::cout << "Stopped " << numStopped << " render processess!" << std::endl;
+		g_logger->info("Stopped {} render processess!", numStopped);
 		if(numFailed > 0)
-			std::cout << "Failed to stop " << numFailed << " render processes!" << std::endl;
+			g_logger->error("Failed to stop {} render processes!", numFailed);
 	});
 	util::CommandManager::RegisterCommand("preview", [this](std::vector<std::string> args) {
 		uint32_t numStopped = 0;
@@ -228,7 +235,7 @@ RTJobManager::RTJobManager(std::unordered_map<std::string, std::string> &&launch
 			if(filePath.has_value())
 				util::open_file_in_default_program(*filePath);
 			else
-				std::cout << "Unable to save preview image: " << err << std::endl;
+				g_logger->error("Unable to save preview image: {}", err);
 		}
 	});
 	util::CommandManager::RegisterCommand("suspend", [this](std::vector<std::string> args) {
@@ -242,9 +249,9 @@ RTJobManager::RTJobManager(std::unordered_map<std::string, std::string> &&launch
 			else
 				++numFailed;
 		}
-		std::cout << "Suspended " << numSuspended << " render processess!" << std::endl;
+		g_logger->info("Suspended {} render processess!", numSuspended);
 		if(numFailed > 0)
-			std::cout << "Failed to suspend " << numFailed << " render processes!" << std::endl;
+			g_logger->error("Failed to suspend {} render processes!", numFailed);
 	});
 	util::CommandManager::RegisterCommand("export", [this](std::vector<std::string> args) {
 		uint32_t numExported = 0;
@@ -259,28 +266,34 @@ RTJobManager::RTJobManager(std::unordered_map<std::string, std::string> &&launch
 			}
 			++devIdx;
 		}
-		std::cout << "Exported " << numExported << " render processess!" << std::endl;
+		g_logger->info("Exported {} render processess!", numExported);
 		if(numFailed > 0)
-			std::cout << "Failed to export " << numFailed << " render processes!" << std::endl;
+			g_logger->error("Failed to export {} render processes!", numFailed);
 	});
 	util::CommandManager::RegisterCommand("shutdown", [this](std::vector<std::string> args) {
 		m_shutdownOnCompletion = args.empty() ? !m_shutdownOnCompletion : util::to_boolean(args[0]);
 		if(m_shutdownOnCompletion)
-			std::cout << "Auto-Shutdown enabled! Operating system will shut down when rendering has been completed." << std::endl;
+			g_logger->info("Auto-Shutdown enabled! Operating system will shut down when rendering has been completed.");
 		else
-			std::cout << "Auto-Shutdown disabled" << std::endl;
+			g_logger->info("Auto-Shutdown disabled");
 	});
 	util::CommandManager::RegisterCommand("autoclose", [this](std::vector<std::string> args) {
 		m_dontCloseOnCompletion = args.empty() ? !m_dontCloseOnCompletion : !util::to_boolean(args[0]);
 		if(m_dontCloseOnCompletion)
-			std::cout << "Auto-Close disabled!" << std::endl;
+			g_logger->info("Auto-Close disabled!");
 		else
-			std::cout << "Auto-Close enabled!" << std::endl;
+			g_logger->info("Auto-Close enabled!");
 	});
+	util::CommandManager::RegisterCommand("help", [this](std::vector<std::string> args) { PrintCommandHelp(); });
+
+	PrintCommandHelp();
+
+	for(auto &devInfo : m_devices)
+		g_logger->info("Using device: {}", magic_enum::enum_name(devInfo.deviceType));
 
 	CollectJobs();
 
-	std::cout << "Executing " << m_jobQueue.size() << " jobs..." << std::endl;
+	g_logger->info("Executing {} jobs...", m_jobQueue.size());
 	m_startTime = std::chrono::high_resolution_clock::now();
 }
 
@@ -289,6 +302,9 @@ RTJobManager::~RTJobManager()
 	util::CommandManager::Join();
 	m_devices.clear();
 	unirender::Renderer::Close();
+
+	g_logger = nullptr;
+	spdlog::shutdown();
 }
 
 bool RTJobManager::IsComplete() const
@@ -377,7 +393,7 @@ void RTJobManager::CollectJobs()
 	m_numJobs = m_jobQueue.size();
 
 	if(m_jobQueue.empty()) {
-		std::cout << "No jobs specified! ";
+		g_logger->warn("No jobs specified!");
 		PrintHelp();
 		std::this_thread::sleep_for(std::chrono::seconds {5});
 	}
@@ -414,40 +430,40 @@ void RTJobManager::UpdateJob(DeviceInfo &devInfo)
 			auto tDelta = std::chrono::high_resolution_clock::now() - devInfo.startTime;
 			double tDeltaD = tDelta.count() / static_cast<double>(progress) * static_cast<double>(1.f - progress);
 			auto strTime = util::get_pretty_duration(tDeltaD / 1'000'000.0);
-			std::cout << "Progress for job '" << ufile::get_file_from_filename(devInfo.outputPath.GetString()) << "': " << util::round_string(progress * 100.f, 2) << " %";
+			std::stringstream ss;
+			ss << "Progress for job '" << ufile::get_file_from_filename(devInfo.outputPath.GetString()) << "': " << util::round_string(progress * 100.f, 2) << " %";
 			if(progress > 0.f)
-				std::cout << " Time remaining: " << strTime << ".";
+				ss << " Time remaining: " << strTime << ".";
 
 			auto numCompleted = m_numSucceeded + m_numFailed + m_numSkipped;
 			auto totalProgress = (numCompleted + progress) / static_cast<float>(m_numJobs);
-			std::cout << " Total progress: " << util::round_string(totalProgress * 100.f, 2.f) << "%";
+			ss << " Total progress: " << util::round_string(totalProgress * 100.f, 2.f) << "%";
 
 			auto tDeltaAll = std::chrono::high_resolution_clock::now() - m_startTime;
 			auto tDeltaMs = std::chrono::duration_cast<std::chrono::milliseconds>(tDeltaAll);
 			auto timePassed = util::get_pretty_duration(tDeltaMs.count());
-			std::cout << " Total time passed: " << timePassed;
+			ss << " Total time passed: " << timePassed;
 
 			auto numComplete = m_numSucceeded + progress;
 			auto numLeft = m_numJobs - m_numFailed - m_numSkipped - numComplete;
 			auto tRemainingMs = (tDeltaMs / numComplete) * numLeft;
 			auto timeRemaining = util::get_pretty_duration(tRemainingMs.count());
-			std::cout << " Total time remaining: " << timeRemaining << std::endl;
-
-			std::cout << std::endl;
+			ss << " Total time remaining: " << timeRemaining;
+			g_logger->info(ss.str());
 		}
 		return;
 	}
 
 	if(job.IsCancelled())
-		std::cout << "Job has been cancelled!" << std::endl;
+		g_logger->info("Job has been cancelled!");
 	else if(job.IsSuccessful() == false)
-		std::cout << "Job has failed!" << std::endl;
+		g_logger->error("Job has failed!");
 	else {
-		std::cout << "Job has been completed successfully!" << std::endl;
+		g_logger->info("Job has been completed successfully!");
 		auto images = job.GetResult().images;
 		auto imgBuf = images.begin()->second;
 
-		std::cout << "Saving images..." << std::endl;
+		g_logger->info("Saving images...");
 		std::optional<std::string> errMsg {};
 		if(m_renderMode == unirender::Scene::RenderMode::BakeDiffuseLighting || m_renderMode == unirender::Scene::RenderMode::BakeDiffuseLightingSeparate) {
 			struct OutputImageInfo {
@@ -522,7 +538,7 @@ void RTJobManager::UpdateJob(DeviceInfo &devInfo)
 				}
 			}
 			if(errMsg.has_value()) {
-				std::cout << *errMsg << std::endl;
+				g_logger->error(*errMsg);
 				fImg = nullptr;
 				FileManager::RemoveSystemFile(devInfo.outputPath.GetString().c_str());
 			}
@@ -532,6 +548,16 @@ void RTJobManager::UpdateJob(DeviceInfo &devInfo)
 	}
 	devInfo.rtScene = nullptr;
 	devInfo.job = {};
+}
+
+void RTJobManager::PrintCommandHelp()
+{
+	std::stringstream ss;
+	ss << "Available commands:\n";
+	for(auto &cmd : util::CommandManager ::GetCommands())
+		ss << cmd << "\n";
+	ss << "\n";
+	g_logger->info(ss.str());
 }
 
 void RTJobManager::PrintHelp()
@@ -557,47 +583,36 @@ void RTJobManager::PrintHelp()
 	ss << "-vertical_camera_range=(0,360]: The vertical range in degrees to use if the camera type is set to \"panorama\".\n";
 	ss << "-color_transform: The color transform to apply to the image.\n";
 	ss << "-color_transform_look: The look of the color transform to apply to the image.\n";
-	std::cout << ss.str();
+	g_logger->info(ss.str());
 }
 
 void RTJobManager::PrintHeader(const unirender::Scene::CreateInfo &createInfo, const unirender::Scene::SceneInfo &sceneInfo)
 {
+	g_logger->info("Header Info:");
 	if(createInfo.samples.has_value())
-		std::cout << "Samples: " << *createInfo.samples << std::endl;
-	std::cout << "Renderer: " << createInfo.renderer << std::endl;
-	std::cout << "HDR Output: " << createInfo.hdrOutput << std::endl;
-	std::cout << "Device: " << ((createInfo.deviceType == unirender::Scene::DeviceType::CPU) ? "CPU" : "GPU") << std::endl;
-	std::cout << "Denoise: ";
-	switch(createInfo.denoiseMode) {
-	case unirender::Scene::DenoiseMode::None:
-		std::cout << "None";
-		break;
-	case unirender::Scene::DenoiseMode::AutoFast:
-		std::cout << "Fast";
-		break;
-	case unirender::Scene::DenoiseMode::AutoDetailed:
-		std::cout << "Detailed";
-		break;
-	}
-	std::cout << std::endl;
+		g_logger->info("Samples: {}", *createInfo.samples);
+	g_logger->info("Renderer: {}", createInfo.renderer);
+	g_logger->info("HDR Output: {}", createInfo.hdrOutput);
+	g_logger->info("Device: {}", magic_enum::enum_name(createInfo.deviceType));
+	g_logger->info("Denoise: {}", magic_enum::enum_name(createInfo.denoiseMode));
 
 	if(createInfo.colorTransform.has_value()) {
-		std::cout << "Color transform: " << createInfo.colorTransform->config << std::endl;
+		g_logger->info("Color transform: {}", createInfo.colorTransform->config);
 		if(createInfo.colorTransform->lookName.has_value())
-			std::cout << "Transform look: " << *createInfo.colorTransform->lookName << std::endl;
+			g_logger->info("Transform look: {}", *createInfo.colorTransform->lookName);
 	}
 
-	std::cout << "Sky angles: " << sceneInfo.skyAngles << std::endl;
-	std::cout << "Sky: " << sceneInfo.sky << std::endl;
-	std::cout << "Sky strength: " << sceneInfo.skyStrength << std::endl;
-	std::cout << "Emission strength: " << sceneInfo.emissionStrength << std::endl;
-	std::cout << "Light intensity factor: " << sceneInfo.lightIntensityFactor << std::endl;
-	std::cout << "Motion blur strength: " << sceneInfo.motionBlurStrength << std::endl;
-	std::cout << "Max transparency bounces: " << sceneInfo.maxTransparencyBounces << std::endl;
-	std::cout << "Max bounces: " << sceneInfo.maxBounces << std::endl;
-	std::cout << "Max diffuse bounces: " << sceneInfo.maxDiffuseBounces << std::endl;
-	std::cout << "Max glossy bounces: " << sceneInfo.maxGlossyBounces << std::endl;
-	std::cout << "Max transmission bounces: " << sceneInfo.maxTransmissionBounces << std::endl;
+	g_logger->info("Sky angles: {} {} {}", sceneInfo.skyAngles.p, sceneInfo.skyAngles.y, sceneInfo.skyAngles.r);
+	g_logger->info("Sky: {}", sceneInfo.sky);
+	g_logger->info("Sky strength: {}", sceneInfo.skyStrength);
+	g_logger->info("Emission strength: {}", sceneInfo.emissionStrength);
+	g_logger->info("Light intensity factor: {}", sceneInfo.lightIntensityFactor);
+	g_logger->info("Motion blur strength: {}", sceneInfo.motionBlurStrength);
+	g_logger->info("Max transparency bounces: {}", sceneInfo.maxTransparencyBounces);
+	g_logger->info("Max bounces: {}", sceneInfo.maxBounces);
+	g_logger->info("Max diffuse bounces: {}", sceneInfo.maxDiffuseBounces);
+	g_logger->info("Max glossy bounces: {}", sceneInfo.maxGlossyBounces);
+	g_logger->info("Max transmission bounces: {}", sceneInfo.maxTransmissionBounces);
 }
 
 static unirender::PMesh create_test_box_mesh(unirender::Scene &rtScene, float r = 50.f)
@@ -669,7 +684,7 @@ bool RTJobManager::StartJob(const std::string &jobName, DeviceInfo &devInfo)
 	auto jobFileName = jobName;
 	auto f = FileManager::OpenSystemFile(jobFileName.c_str(), "rb");
 	if(f == nullptr) {
-		std::cout << "Job file '" << jobFileName << "' not found!" << std::endl;
+		g_logger->error("Job file '{}' not found!", jobFileName);
 		++m_numFailed;
 		return false;
 	}
@@ -687,7 +702,7 @@ bool RTJobManager::StartJob(const std::string &jobName, DeviceInfo &devInfo)
 	if(success) {
 		auto printHeader = (m_launchParams.find("-print_header") != m_launchParams.end());
 		if(printHeader) {
-			std::cout << "Header information for job '" << ufile::get_file_from_filename(jobFileName) << "':" << std::endl;
+			g_logger->info("Header information for job '{}':", ufile::get_file_from_filename(jobFileName));
 			PrintHeader(createInfo, sceneInfo);
 			return true;
 		}
@@ -703,12 +718,12 @@ bool RTJobManager::StartJob(const std::string &jobName, DeviceInfo &devInfo)
 		outputPath += ufile::get_file_from_filename(fileName); // TODO: Only write file name in the first place
 
 		if(FileManager::ExistsSystem(outputPath.GetString())) {
-			std::cout << "Output file '" << outputPath.GetString() << "' for job '" << ufile::get_file_from_filename(jobFileName) << "' already exists! Skipping..." << std::endl;
+			g_logger->info("Output file '{}' for job '{}' already exists! Skipping...", outputPath.GetString(), ufile::get_file_from_filename(jobFileName));
 			++m_numSkipped;
 			return false;
 		}
 
-		std::cout << "Initializing job '" << jobFileName << "'..." << std::endl;
+		g_logger->info("Initializing job '{}'...", jobFileName);
 
 		auto itRenderMode = m_launchParams.find("-render_mode");
 		if(itRenderMode != m_launchParams.end()) {
@@ -772,7 +787,7 @@ bool RTJobManager::StartJob(const std::string &jobName, DeviceInfo &devInfo)
 		if(itLog == m_launchParams.end() || util::to_boolean(itLog->second) == false)
 			unirender::set_log_handler();
 		else {
-			unirender::set_log_handler([](const std::string &msg) { std::cout << "Log: " << msg << std::endl; });
+			unirender::set_log_handler([](const std::string &msg) { g_logger->info(msg); });
 		}
 
 		auto itRenderer = m_launchParams.find("-renderer");
@@ -784,12 +799,11 @@ bool RTJobManager::StartJob(const std::string &jobName, DeviceInfo &devInfo)
 	createInfo.progressiveRefine = false;
 
 	PrintHeader(createInfo, sceneInfo);
-	std::cout << std::endl;
 
 	auto nodeManager = unirender::NodeManager::Create(); // Unused, since we only use shaders from serialized data
 	auto rtScene = success ? unirender::Scene::Create(*nodeManager, ds, ufile::get_path_from_filename(jobFileName), renderMode, createInfo) : nullptr;
 	if(rtScene == nullptr) {
-		std::cout << "Unable to create scene from serialized data!" << std::endl;
+		g_logger->error("Unable to create scene from serialized data!");
 		++m_numFailed;
 		return false;
 	}
@@ -881,7 +895,7 @@ bool RTJobManager::StartJob(const std::string &jobName, DeviceInfo &devInfo)
 	std::string errMsg;
 	devInfo.renderer = unirender::Renderer::Create(*rtScene, createInfo.renderer, errMsg, unirender::Renderer::Flags::DisableDisplayDriver);
 	if(devInfo.renderer == nullptr) {
-		std::cout << "Failed to create renderer: " << errMsg << "!" << std::endl;
+		g_logger->error("Failed to create renderer: {}!", errMsg);
 		return false;
 	}
 	if(devInfo.renderer == nullptr)
@@ -923,12 +937,12 @@ DLLEXPORT int render_raytracing(int argc, char *argv[])
 		rtManager->Update();
 
 	util::flash_window();
-	std::cout << rtManager->GetNumSucceeded() << " succeeded, " << rtManager->GetNumSkipped() << " skipped and " << rtManager->GetNumFailed() << " failed!" << std::endl;
+	g_logger->info("{} succeeded, {} skipped and {} failed!", rtManager->GetNumSucceeded(), rtManager->GetNumSkipped(), rtManager->GetNumFailed());
 
 	auto shutDown = rtManager->ShouldShutDownOnCompletion();
 	auto waitBeforeExit = true;
 	if(!rtManager->ShouldAutoCloseOnCompletion() && !shutDown) {
-		std::cout << "Press enter to exit..." << std::endl;
+		g_logger->info("Press enter to exit...");
 		util::CommandManager::Stop();
 		waitBeforeExit = false;
 	}
@@ -937,7 +951,7 @@ DLLEXPORT int render_raytracing(int argc, char *argv[])
 	if(waitBeforeExit)
 		std::this_thread::sleep_for(std::chrono::seconds {5});
 	if(shutDown) {
-		std::cout << "Shutting down..." << std::endl;
+		g_logger->info("Shutting down...");
 		std::this_thread::sleep_for(std::chrono::seconds {5});
 		util::shutdown_os();
 	}

@@ -66,6 +66,7 @@ link_external_library(vfilesystem)
 link_external_library(util_raytracing)
 link_external_library(util_ocio)
 link_external_library(util_udm)
+link_external_library(spdlog)
 
 add_include_dir(cycles)
 add_include_dir(cycles_atomic)
