@@ -118,6 +118,9 @@ RTJobManager::RTJobManager(std::unordered_map<std::string, std::string> &&launch
 	unirender::set_logger(logger);
 	g_logger = logger;
 
+	// Don't go into auto-sleep mode while the program is running
+	util::set_prevent_os_sleep_mode(true);
+
 	/*auto kernelPath = util::Path::CreatePath(util::get_program_path());
 	kernelPath += "modules/cycles";
 	auto itKernelPath = m_launchParams.find("-kernel_path");
