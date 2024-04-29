@@ -152,4 +152,4 @@ if(DEFINED PRECOMPILED_HEADER)
 endif()
 set_target_properties(${PROJ_NAME} PROPERTIES ${TARGET_PROPERTIES})
 
-add_dependencies(${PROJ_NAME} util_raytracing)
+add_dependencies(${PROJ_NAME} util_raytracing spdlog)
