@@ -117,6 +117,10 @@ if(DEFINED PRECOMPILED_HEADER)
 endif()
 set_target_properties(${PROJ_NAME} PROPERTIES ${TARGET_PROPERTIES})
 
+if(UNIX)
+	set_property(TARGET ${PROJ_NAME} PROPERTY POSITION_INDEPENDENT_CODE ON)
+endif()
+
 add_subdirectory(external_libs/render_raytracing_lib)
 
 add_dependencies(${PROJ_NAME} render_raytracing_lib)
